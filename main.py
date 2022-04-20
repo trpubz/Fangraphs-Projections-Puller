@@ -6,8 +6,6 @@
 # init: 2022APR16
 # lastUpdate: 2022APR19
 
-from Stats import StatGrp
-from Projections import Projections
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.common import exceptions
@@ -16,9 +14,32 @@ import os
 import glob
 import time
 import pandas as pd
+from enum import Enum
+
+
+class Projections(Enum):
+    DC_RoS = "rfangraphsdc"
+    ZiPS_RoS = "rzips"
+    ATC = "atc"
+
+
+class StatGrp(Enum):
+    HIT = 'bat'
+    PIT = 'pit'
 
 
 def dir_builder(dirDownload: str = "root") -> os.path:
+    """
+    :param dirDownload: String representation of the desired directory to
+    download.  If nothing passed, defaults to the project's root directory.
+
+    :return: the os.path which is a string
+
+    Builds a directory on the user preference.
+
+    The function also removes any previously downloaded files found in the same directory with the same naming
+    convention.
+    """
     outputPath: os.path
     projectRoot = os.path.dirname(__file__)
     files = glob.glob(projectRoot + "/csvs/*.csv")
@@ -49,6 +70,13 @@ def driver_config(dirDownload: os.path) -> webdriver:
 
 
 def url_builder(projections: [Projections], pos: [StatGrp] = [StatGrp.HIT, StatGrp.PIT]) -> [{str: str}]:
+    """
+    :param projections: A list of Projections enums representing the desired FanGraphs projection options
+    :param pos: A list of position groups. Either hitters, pitchers, or both.  Defaults to both
+    :return: A list of dictionary items.  The list represents the URL objects and the dict is keyed by the URL id which
+    is used to save the file with the proper naming convention and keyed by the fgURL which is the URL link.
+    Builds URLs based on user need.
+    """
     urls = []
     for grp in pos:
         for proj in projections:
@@ -61,11 +89,22 @@ def url_builder(projections: [Projections], pos: [StatGrp] = [StatGrp.HIT, StatG
 
 
 def download_csv(driver: webdriver, dirDownload: os.path, projections: [Projections],
-                 pos: [StatGrp] = [StatGrp.HIT, StatGrp.PIT]) -> [str]:
-    locCSVs = []
+                 pos: [StatGrp] = [StatGrp.HIT, StatGrp.PIT]) -> [os.path]:
+    """
+    :param driver: a Selenium webdriver
+    :param dirDownload: os.path of the desired download directory
+    :param projections: the list of desired projections are used to pass directly to the url_builder() func
+    :param pos: the list of desired pos groups are used to pass directly to the url_builder() func
+    :return: a list of os.path strings used to represent the file locations
+    This function gets an HTML page using the Selenium driver, clicks on the Export Data (csv) button, and renames
+    the files appropriately.
+    """
+    locCSVs = []  # location of .csvs
+    # FGs are the dictionary items
     FGs = url_builder(projections=projections, pos=pos)
     for fg in FGs:
         driver.get(fg["fgURL"])
+        # hard sleep
         time.sleep(2)
         # Wait a reasonable time that a person would take
         driver.implicitly_wait(5)
@@ -76,29 +115,22 @@ def download_csv(driver: webdriver, dirDownload: os.path, projections: [Projecti
             driver.implicitly_wait(15)
             # Wait until the element to download is available and then stop loading
             driver.find_element(By.LINK_TEXT, "Export Data").click()
-            # driver.switch_to.active_element()
-            # driver.find_element(By.LINK_TEXT, "Save").click()
             print("got 'em all")
         except exceptions as e:
             print(e.message)
-        # dropdownButton = driver.find_element(By.CSS_SELECTOR, "button.rcbActionButton")
-        # Fangraphs has ads that cause the page to appear to continue loading
-        # driver.execute_script("window.stop();")
-        # dropdownButton.click()
-        # options = Select(driver.find_element(By.CSS_SELECTOR, "ul.rcbList"))
-        # options.select_by_visible_text("1000")
-        # get the files in the download directory
+        # get all the .csv files in the download directory
         files = glob.glob(dirDownload + "/*.csv")
         for f in files:
             # the file will always download as 'FanGraphs Leaderboard.csv'
             if f.__contains__("FanGraphs"):
-                newFileName = fg["id"]
+                newFileName = fg["id"]  # part of the URL object group
+                # remove old files
                 for removable in files:
                     if removable.__contains__(newFileName):
                         os.remove(removable)
-                fileDownloaded = dirDownload + "/" + newFileName + ".csv"
-                os.rename(f, fileDownloaded)
-                locCSVs.append(fileDownloaded)
+                newDownloadPath = dirDownload + "/" + newFileName + ".csv"
+                os.rename(f, newDownloadPath)
+                locCSVs.append(newDownloadPath)
                 break
 
     return locCSVs
