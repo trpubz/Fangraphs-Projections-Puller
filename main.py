@@ -1,10 +1,9 @@
 # by pubins.taylor
 # automates the downloading of RoS Projections based on user input
-# v0.9
-#   working version which prints pandas df to console
-#   TODO: clean up columns with "-1" for conversion to JSON export
+# v1
+#   working version which saves csv
 # init: 2022APR16
-# lastUpdate: 2022APR19
+# lastUpdate: 2122APR19
 
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
@@ -43,13 +42,13 @@ def dir_builder(dirDownload: str = "root") -> os.path:
     outputPath: os.path
     projectRoot = os.path.dirname(__file__)
     files = glob.glob(projectRoot + "/csvs/*.csv")
-    for f in files:
-        if f.__contains__("FanGraphs"):
-            os.remove(f)
+    # for f in files:
+    #     if f.__contains__("FanGraphs"):
+    #         os.remove(f)
     if dirDownload == "root":
         outputPath = projectRoot + '/csvs'
     elif dirDownload.startswith('C:\\') or dirDownload.startswith('/Users'):
-        outputPath = os.path(dirDownload)
+        outputPath = dirDownload
     else:
         AssertionError()
 
@@ -88,7 +87,7 @@ def url_builder(projections: [Projections], pos: [StatGrp] = [StatGrp.HIT, StatG
     return urls
 
 
-def download_csv(driver: webdriver, dirDownload: os.path, projections: [Projections],
+def download_csv(dirDownload: os.path, projections: [Projections],
                  pos: [StatGrp] = [StatGrp.HIT, StatGrp.PIT]) -> [os.path]:
     """
     :param driver: a Selenium webdriver
@@ -103,21 +102,23 @@ def download_csv(driver: webdriver, dirDownload: os.path, projections: [Projecti
     # FGs are the dictionary items
     FGs = url_builder(projections=projections, pos=pos)
     for fg in FGs:
+        driver = driver_config(dirDownload=dirDownload)
         driver.get(fg["fgURL"])
-        # hard sleep
-        time.sleep(2)
         # Wait a reasonable time that a person would take
-        driver.implicitly_wait(5)
+        driver.implicitly_wait(15)
         # Scrolling down the page helps get to the file more reliably
         driver.execute_script("window.scrollTo(0, 200)")
         try:
+            # hard sleep
+            time.sleep(2)
             # Wait a reasonable time that a person would take
             driver.implicitly_wait(15)
             # Wait until the element to download is available and then stop loading
             driver.find_element(By.LINK_TEXT, "Export Data").click()
-            print("got 'em all")
+            time.sleep(2)
         except exceptions as e:
             print(e.message)
+
         # get all the .csv files in the download directory
         files = glob.glob(dirDownload + "/*.csv")
         for f in files:
@@ -131,6 +132,8 @@ def download_csv(driver: webdriver, dirDownload: os.path, projections: [Projecti
                 newDownloadPath = dirDownload + "/" + newFileName + ".csv"
                 os.rename(f, newDownloadPath)
                 locCSVs.append(newDownloadPath)
+                print(fr"successfully downloaded {newFileName} to {dirDownload}")
+                driver.close()
                 break
 
     return locCSVs
@@ -139,12 +142,35 @@ def download_csv(driver: webdriver, dirDownload: os.path, projections: [Projecti
 def print_csvs(files: [os.path]):
     for f in files:
         df = pd.read_csv(f)
+        # axis 1 means columns, inplace means no need for df reassignment
+        df.dropna(axis=1, inplace=True)
         print(df)
 
 
 if __name__ == "__main__":
-    dirDownload = dir_builder()
-    driver = driver_config(dirDownload=dirDownload)
-    files = download_csv(driver=driver, dirDownload=dirDownload, projections=[Projections.DC_RoS])
+    optProjs = [p for p in Projections]
+    # Print out your options
+    for i in range(len(optProjs)):
+        print(str(i + 1) + ":", optProjs[i].name)
+
+    # Take user input and get the corresponding item from the list
+    inpProjs = int(input("Choose a projection system: "))
+    if inpProjs in range(1, len(optProjs)):
+        inpProjs = optProjs[inpProjs - 1]
+    else:
+        print("Invalid input!")
+
+    optDirs = ["/Users/Shared/Baseball HQ/regseason", "root"]
+    # Print out your options
+    for i in range(len(optDirs)):
+        print(str(i + 1) + ":", optDirs[i])
+
+    # Take user input and get the corresponding item from the list
+    inpDirs = int(input("Choose a projection system: "))
+    if inpDirs in range(1, len(optDirs)):
+        inpDirs = optDirs[inpDirs - 1]
+    else:
+        print("Invalid input!")
+    dirDownload = dir_builder(dirDownload=inpDirs)
+    files = download_csv(dirDownload=dirDownload, projections=[inpProjs])
     print_csvs(files)
-    driver.quit()
